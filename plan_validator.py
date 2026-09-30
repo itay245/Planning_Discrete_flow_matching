@@ -260,6 +260,16 @@ def validate_tensor_plan(
 
         if operator == "<END>":
 
+            if strict_format and seen_end:
+                return PlanValidationResult(
+                    valid=False,
+                    solves_problem=False,
+                    plan=decoded_plan,
+                    executed_actions=0,
+                    failure_step=row_index,
+                    reason="Duplicate END token.",
+                )
+
             if strict_format:
                 expected_arguments = [
                     "<NONE>"

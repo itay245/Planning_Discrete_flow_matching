@@ -51,7 +51,7 @@ def train_dfm(
             if torch.cuda.is_available()
             else "cpu"
         )
-
+    print(f"Training on {device}.")
     device = torch.device(device)
 
     model = model.to(device)

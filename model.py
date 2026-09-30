@@ -19,7 +19,7 @@ class DFMConfig:
     # H + 1, because END occupies one extra plan row.
     plan_slots: int
 
-    d_model: int = 256
+    d_model: int = 1024
     nhead: int = 8
     num_layers: int = 6
     dim_feedforward: int = 1024
