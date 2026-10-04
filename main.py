@@ -75,36 +75,90 @@ def arrangement_facts(stacks):
             facts[("on", upper, lower)] = True
     return facts
 
-
-def make_problem_splits(seed=42,num_probs=9):
-    """Select 9 distinct pairs per split, with disjoint initial arrangements.
-
-    Goals describe complete table arrangements using positive facts, as required
-    by PlanCodec. No instance is already solved in its initial state. Goals may
-    be shared across splits; the initial-state/goal pairs and initial states are
-    disjoint. This is a small same-domain generalization experiment.
+def make_problem_splits(seed=42, num_probs=9):
     """
+    Create train and test Blocks World problem splits.
+
+    Train:
+        The first `num_probs` problems.
+
+    Test:
+        The last 20 problems.
+
+    Initial state and goal are always different, so no generated
+    problem is already solved.
+
+    The train and test sets contain distinct (initial, goal) pairs.
+    """
+
     rng = random.Random(seed)
+
     arrangements = block_arrangements()
-    rng.shuffle(arrangements)
-    splits = []
-    for split, starts in (("train", arrangements[:6]), ("test", arrangements[6:])):
-        # Cycle over starts so every available initial arrangement is represented.
-        pairs = []
-        for start in starts:
-            goals = [goal for goal in arrangements if goal != start]
-            rng.shuffle(goals)
-            pairs.append([(start, goal) for goal in goals])
-        selected = [pairs[i % len(starts)][i // len(starts)] for i in range(num_probs)]
+
+    # ---------------------------------------------------------
+    # Generate every possible non-trivial (initial, goal) pair.
+    # ---------------------------------------------------------
+
+    all_pairs = [
+        (start, goal)
+        for start in arrangements
+        for goal in arrangements
+        if start != goal
+    ]
+
+    # Random but reproducible ordering.
+    rng.shuffle(all_pairs)
+
+    num_test = 20
+
+    if num_probs + num_test > len(all_pairs):
+        raise ValueError(
+            f"Requested {num_probs} training problems and "
+            f"{num_test} test problems, but only "
+            f"{len(all_pairs)} distinct initial/goal pairs exist."
+        )
+
+    # ---------------------------------------------------------
+    # Train = first num_probs
+    # Test  = last 20
+    # ---------------------------------------------------------
+
+    train_pairs = all_pairs[:num_probs]
+    test_pairs = all_pairs[-num_test:]
+
+    def build_instances(pairs, split):
         instances = []
-        for index, (start, goal) in enumerate(selected, 1):
-            config = {"blocks": ["A", "B", "C"],
-                      "initial_state": arrangement_facts(start),
-                      "goal_state": arrangement_facts(goal)}
-            instances.append({"id": f"{split}_{index:02d}", "initial_stacks": start,
-                              "goal_stacks": goal, "problem": create_blocksworld_problem(config)})
-        splits.append(instances)
-    return tuple(splits)
+
+        for index, (start, goal) in enumerate(pairs, 1):
+
+            config = {
+                "blocks": ["A", "B", "C"],
+                "initial_state": arrangement_facts(start),
+                "goal_state": arrangement_facts(goal),
+            }
+
+            instances.append(
+                {
+                    "id": f"{split}_{index:02d}",
+                    "initial_stacks": start,
+                    "goal_stacks": goal,
+                    "problem": create_blocksworld_problem(config),
+                }
+            )
+
+        return instances
+
+    train_instances = build_instances(
+        train_pairs,
+        "train",
+    )
+
+    test_instances = build_instances(
+        test_pairs,
+        "test",
+    )
+
+    return train_instances, test_instances
 
 
 def build_training_dataset(instances, config):
@@ -141,7 +195,7 @@ def train_model(dataset, codec, config, device=None):
         vocab_size=codec.vocab_size, tuple_width=codec.tuple_width,
         context_rows=dataset[0]["context"].shape[0], plan_slots=codec.num_plan_slots,
         d_model=config.d_model, nhead=4, num_layers=config.num_layers,
-        dim_feedforward=16 * config.d_model, dropout=0.1)
+        dim_feedforward=64 * config.d_model, dropout=0.2)
     model = PlanningDFM(model_config, build_plan_output_mask(codec))
     history = train_dfm(model, loader, codec, epochs=config.epochs,
                         learning_rate=config.learning_rate, device=device)

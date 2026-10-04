@@ -35,7 +35,7 @@ def train_dfm(
     *,
     epochs: int = 50,
     learning_rate: float = 3e-4,
-    weight_decay: float = 1e-4,
+    weight_decay: float = 1e-6,
     device=None,
     schedule=LinearSchedule,
     grad_clip: float = 1.0,
